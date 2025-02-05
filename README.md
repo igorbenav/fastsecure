@@ -20,7 +20,7 @@ FastSecure is a flexible authentication system for FastAPI applications that sup
 ## Installation
 
 ```bash
-pip install fastverify
+pip install fastsecure
 ```
 
 ## Quick Start
@@ -29,7 +29,7 @@ Here's a simple example using JWT authentication:
 
 ```python
 from fastapi import FastAPI, Depends
-from fastverify import (
+from fastsecure import (
     AuthenticationManager,
     JWTAuthenticationProvider,
     requires_auth
@@ -57,7 +57,7 @@ async def protected_route(auth = Depends(requires_auth("/protected"))):
 You can combine multiple authentication methods:
 
 ```python
-from fastverify import (
+from fastsecure import (
     AuthenticationManager,
     AuthStrategy,
     JWTAuthenticationProvider,
@@ -93,7 +93,7 @@ auth_manager.add_requirement(
 Adding OAuth providers is straightforward:
 
 ```python
-from fastverify import GoogleAuthProvider
+from fastsecure import GoogleAuthProvider
 
 google_auth = GoogleAuthProvider(
     client_id="your-client-id",
