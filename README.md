@@ -1,5 +1,11 @@
 # FastSecure
 
+<p align="center">
+  <a href="https://igorbenav.github.io/fastsecure/">
+    <img src="docs/assets/FastSecure.png" alt="FastSecure logo" width="45%" height="auto">
+  </a>
+</p>
+
 A modern, flexible authentication system for FastAPI applications with support for multiple authentication methods and strategies.
 
 ## Table of Contents
