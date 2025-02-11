@@ -20,6 +20,9 @@ A modern, flexible authentication system for FastAPI applications with support f
 - [Contributing](#contributing)
 - [License](#license)
 
+> [!WARNING]  
+> FastSecure is still experimental.
+
 ## Features
 
 - 🔐 **Multiple Authentication Methods**
@@ -55,16 +58,13 @@ A modern, flexible authentication system for FastAPI applications with support f
 pip install fastsecure
 ```
 
-2. Install optional dependencies for specific features:
+2. Install using uv or poetry:
 ```bash
-# Redis storage backend
-pip install fastsecure[redis]
+uv add fastsecure
+```
 
-# Database storage backend
-pip install fastsecure[database]
-
-# All optional dependencies
-pip install fastsecure[all]
+```bash
+poetry add fastsecure
 ```
 
 ## Core Concepts
@@ -131,7 +131,57 @@ jwt_auth = JWTAuthenticationProvider(
 auth_manager.register_provider("jwt", jwt_auth)
 ```
 
-3. **Configure Protected Routes**
+3. **Create Authentication Dependency**
+
+```python
+from fastapi import Request
+from typing import Optional
+
+async def requires_auth(request: Request, path: Optional[str] = None) -> dict:
+    """
+    FastAPI dependency for authentication requirements.
+    
+    Args:
+        request: The FastAPI request object
+        path: Optional path override for authentication requirements
+    
+    Returns:
+        Authentication result if successful
+    
+    Raises:
+        HTTPException: If authentication fails
+    """
+    # Get authentication data from request headers
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        raise HTTPException(status_code=401, detail="No authentication provided")
+    
+    # Parse Bearer token
+    try:
+        scheme, token = auth_header.split()
+        if scheme.lower() != "bearer":
+            raise HTTPException(status_code=401, detail="Invalid authentication scheme")
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid authorization header")
+    
+    # Authenticate using the manager
+    result = await auth_manager.authenticate(
+        path or request.url.path,
+        {"jwt": {"access_token": token}}
+    )
+    
+    if not result.success:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication failed",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    
+    return result
+
+```
+
+4. **Configure Protected Routes**
 
 ```python
 # Add authentication requirement for protected paths
@@ -142,7 +192,7 @@ auth_manager.add_requirement(
 )
 ```
 
-4. **Implement Login and Protected Routes**
+5. **Implement Login and Protected Routes**
 
 ```python
 from pydantic import BaseModel
@@ -176,32 +226,11 @@ async def login(credentials: LoginCredentials):
     }
 
 @app.get("/api/protected/data")
-async def protected_data(auth = Depends(auth_manager.requires_auth)):
+async def protected_data(auth = Depends(requires_auth)):
     return {
         "message": "Authenticated!",
         "user_id": auth.user_id,
         "scopes": auth.metadata.get("scopes", [])
-    }
-```
-
-5. **Implement Token Refresh**
-
-```python
-@app.post("/api/auth/refresh")
-async def refresh_token(refresh_token: str):
-    result = await auth_manager.refresh_authentication(
-        "jwt",
-        {"refresh_token": refresh_token}
-    )
-    
-    if not result.success:
-        raise HTTPException(401, "Token refresh failed")
-    
-    return {
-        "access_token": result.access_token,
-        "refresh_token": result.refresh_token,
-        "token_type": "Bearer",
-        "expires_at": result.expires_at
     }
 ```
 
@@ -524,49 +553,12 @@ class CustomSessionStore(SessionStore):
    - Log security events
    - Regular security audits
 
-## Troubleshooting
-
-Common issues and solutions:
-
-1. **Token Validation Fails**
-   - Check token expiration
-   - Verify secret keys match
-   - Ensure correct token format
-
-2. **Session Issues**
-   - Verify storage backend connection
-   - Check session timeout settings
-   - Validate cookie settings
-
-3. **OAuth Problems**
-   - Confirm OAuth credentials
-   - Check redirect URI configuration
-   - Verify state parameter handling
-
-## Contributing
-
-We welcome contributions! Here's how you can help:
-
-1. **Code Contributions**
-   - Fork the repository
-   - Create a feature branch
-   - Submit a pull request
-
-2. **Bug Reports**
-   - Use the issue tracker
-   - Provide reproduction steps
-   - Include relevant logs
-
-3. **Documentation**
-   - Improve examples
-   - Fix typos
-   - Add tutorials
-
-4. **Feature Requests**
-   - Describe the feature
-   - Explain use cases
-   - Provide examples
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Contact
+
+Igor Benav – [@igorbenav](https://x.com/igorbenav) – igormagalhaesr@gmail.com
+[github.com/igorbenav](https://github.com/igorbenav/)
