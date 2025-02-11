@@ -15,6 +15,10 @@ from .providers import (
     DatabaseSessionStore,
     DBSession,
 )
+from .password import (
+    PasswordHasher,
+    BCryptPasswordHasher,
+)
 from .exceptions import (
     AuthenticationError,
     InvalidCredentialsError,
@@ -42,6 +46,9 @@ __all__ = [
     "RedisSessionStore",
     "DatabaseSessionStore",
     "DBSession",
+    # Password
+    "PasswordHasher",
+    "BCryptPasswordHasher",
     # Exceptions
     "AuthenticationError",
     "InvalidCredentialsError",

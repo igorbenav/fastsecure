@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 from .types import AuthStrategy, AuthenticationResult, AuthenticationRequirement
 from .strategies import AuthenticationStrategy, AnyAuthStrategy, AllAuthStrategy
 from ..providers.base import AuthenticationProvider
+from ..password import PasswordHasher, BCryptPasswordHasher
 from ..exceptions import ProviderNotFoundError
 
 
@@ -20,6 +21,7 @@ class AuthenticationManager:
         providers: Dictionary mapping provider names to AuthenticationProvider instances
         strategies: Dictionary mapping AuthStrategy types to strategy implementations
         _requirements: Dictionary mapping paths to their authentication requirements
+        _password_hasher: Password hasher instance for handling password operations
 
     Example:
         Basic setup with OAuth providers:
@@ -70,14 +72,29 @@ class AuthenticationManager:
             strategy=AuthStrategy.ALL
         )
         ```
+
+        Password hashing:
+        ```python
+        # Hash and verify passwords
+        hashed = auth_manager.hash_password("mypassword")
+        is_valid = auth_manager.verify_password("mypassword", hashed)
+
+        # Use custom password hasher
+        custom_hasher = BCryptPasswordHasher(rounds=14)
+        auth_manager.set_password_hasher(custom_hasher)
+        ```
     """
 
-    def __init__(self) -> None:
+    def __init__(self, password_hasher: Optional[PasswordHasher] = None) -> None:
         """
         Initialize the authentication manager.
 
-        Sets up empty provider registry and default authentication strategies
-        (ANY and ALL).
+        Sets up empty provider registry, default authentication strategies
+        (ANY and ALL), and password hashing functionality.
+
+        Args:
+            password_hasher: Optional custom password hasher implementation
+                           (defaults to BCryptPasswordHasher)
         """
         self.providers: Dict[str, AuthenticationProvider] = {}
         self.strategies: Dict[AuthStrategy, AuthenticationStrategy] = {
@@ -85,6 +102,60 @@ class AuthenticationManager:
             AuthStrategy.ALL: AllAuthStrategy(),
         }
         self._requirements: Dict[str, AuthenticationRequirement] = {}
+        self._password_hasher = password_hasher or BCryptPasswordHasher()
+
+    def hash_password(self, password: str) -> str:
+        """
+        Hash a password using the configured password hasher.
+
+        Args:
+            password: Plain text password to hash
+
+        Returns:
+            str: Hashed password
+
+        Example:
+            ```python
+            auth_manager = AuthenticationManager()
+            hashed = auth_manager.hash_password("mypassword")
+            ```
+        """
+        return self._password_hasher.hash_password(password)
+
+    def verify_password(self, plain_password: str, hashed_password: str) -> bool:
+        """
+        Verify a password against its hash using the configured password hasher.
+
+        Args:
+            plain_password: Plain text password to verify
+            hashed_password: Hash to verify against
+
+        Returns:
+            bool: True if password matches hash, False otherwise
+
+        Example:
+            ```python
+            auth_manager = AuthenticationManager()
+            is_valid = auth_manager.verify_password("mypassword", hashed)
+            ```
+        """
+        return self._password_hasher.verify_password(plain_password, hashed_password)
+
+    def set_password_hasher(self, password_hasher: PasswordHasher) -> None:
+        """
+        Update the password hasher used by this authentication manager.
+
+        Args:
+            password_hasher: New password hasher implementation to use
+
+        Example:
+            ```python
+            auth_manager = AuthenticationManager()
+            custom_hasher = BCryptPasswordHasher(rounds=14)
+            auth_manager.set_password_hasher(custom_hasher)
+            ```
+        """
+        self._password_hasher = password_hasher
 
     def register_provider(self, name: str, provider: AuthenticationProvider) -> None:
         """
@@ -410,28 +481,26 @@ class AuthenticationManager:
         self, provider_name: str, auth_data: Dict[str, Any]
     ) -> bool:
         """
-        Refresh authentication for a provider.
+        Revoke authentication for a provider.
 
-        Attempts to refresh expired authentication using refresh tokens
-        or other provider-specific mechanisms.
+        Attempts to revoke or invalidate the given authentication credentials.
 
         Args:
-            provider_name: Name of the provider to refresh
-            auth_data: Current authentication data including refresh tokens
+            provider_name: Name of the provider to revoke authentication for
+            auth_data: Current authentication data to revoke
 
         Returns:
-            AuthenticationResult: Result of refresh attempt
+            bool: True if revocation successful, False otherwise
 
         Raises:
             ProviderNotFoundError: If the specified provider is not registered
 
         Example:
             ```python
-            result = await auth_manager.refresh_authentication(
+            success = await auth_manager.revoke_authentication(
                 provider_name="google",
                 auth_data={
-                    "refresh_token": "token",
-                    "access_token": "expired_token"
+                    "access_token": "token_to_revoke"
                 }
             )
             ```

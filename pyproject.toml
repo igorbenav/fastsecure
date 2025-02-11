@@ -21,6 +21,7 @@ classifiers = [
 ]
 
 dependencies = [
+    "bcrypt>=4.2.1",
     "greenlet>=3.0.0",
     "httpx>=0.28.1",
     "pydantic>=2.0.0",
