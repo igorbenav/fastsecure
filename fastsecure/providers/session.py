@@ -8,19 +8,71 @@ from ..core.types import AuthenticationResult
 
 
 def now_utc() -> datetime:
-    """Get current UTC datetime"""
+    """
+    Get the current UTC datetime.
+
+    Returns:
+        datetime: Current time in UTC timezone
+    """
     return datetime.now(timezone.utc)
 
 
 def ensure_utc(dt: datetime) -> datetime:
-    """Ensure a datetime is UTC aware"""
+    """
+    Ensure a datetime object is UTC-aware.
+
+    Args:
+        dt: The datetime object to check
+
+    Returns:
+        datetime: The same datetime with UTC timezone if not already set
+    """
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt
 
 
 class SessionAuthenticationProvider(AuthenticationProvider):
-    """Session-based authentication provider"""
+    """
+    Authentication provider implementing session-based authentication.
+
+    This provider manages user sessions with features like session timeout,
+    maximum concurrent sessions per user, and automatic cleanup of expired
+    sessions. It supports different session storage backends including
+    memory, Redis, and database storage.
+
+    Attributes:
+        store: The session storage backend
+        session_timeout: How long sessions remain valid
+        max_sessions: Maximum number of concurrent sessions per user
+        cleanup_expired: Whether to automatically remove expired sessions
+        supports_revocation: Always True as sessions can be revoked
+
+    Example:
+        Basic initialization with memory storage:
+        ```python
+        provider = SessionAuthenticationProvider(
+            session_timeout_minutes=60,
+            max_sessions_per_user=3
+        )
+        ```
+
+        Using Redis storage:
+        ```python
+        provider = SessionAuthenticationProvider(
+            session_store=RedisSessionStore("redis://localhost"),
+            session_timeout_minutes=60
+        )
+        ```
+
+        Using database storage:
+        ```python
+        provider = SessionAuthenticationProvider(
+            session_store=DatabaseSessionStore(async_session_factory),
+            cleanup_expired=True
+        )
+        ```
+    """
 
     def __init__(
         self,
@@ -29,17 +81,40 @@ class SessionAuthenticationProvider(AuthenticationProvider):
         max_sessions_per_user: int = 5,
         cleanup_expired: bool = True,
     ):
+        """
+        Initialize the session authentication provider.
+
+        Args:
+            session_store: Storage backend for sessions (default: MemorySessionStore)
+            session_timeout_minutes: Session lifetime in minutes (default: 30)
+            max_sessions_per_user: Max concurrent sessions per user (default: 5)
+            cleanup_expired: Whether to remove expired sessions (default: True)
+        """
         self.store = session_store or MemorySessionStore()
         self.session_timeout = timedelta(minutes=max(0, session_timeout_minutes))
         self.max_sessions = max_sessions_per_user
         self.cleanup_expired = cleanup_expired
 
     def get_required_credentials(self) -> Set[str]:
-        """Get required credentials for session authentication"""
+        """
+        Get required credentials for session authentication.
+
+        Returns:
+            Set[str]: Set containing only "user_id" as required credential
+        """
         return {"user_id"}
 
     async def _cleanup_user_sessions(self, user_id: int) -> None:
-        """Remove expired sessions and enforce max sessions limit"""
+        """
+        Clean up a user's sessions by removing expired ones and enforcing
+        the maximum sessions limit.
+
+        If the user has more active sessions than allowed, the oldest
+        sessions are removed to stay within the limit.
+
+        Args:
+            user_id: The ID of the user whose sessions to clean up
+        """
         sessions = await self.store.get_user_sessions(user_id)
         current_time = now_utc()
 
@@ -62,7 +137,37 @@ class SessionAuthenticationProvider(AuthenticationProvider):
                 await self.store.delete_session(session["session_id"])
 
     async def authenticate(self, credentials: Dict[str, Any]) -> AuthenticationResult:
-        """Create a new session"""
+        """
+        Create a new session for the user.
+
+        Creates a session with a unique ID and stores user information
+        including IP address, user agent, and custom metadata. Also performs
+        session cleanup before creating new sessions.
+
+        Args:
+            credentials: Dictionary containing:
+                - user_id: Required user identifier
+                - ip_address: Optional client IP
+                - user_agent: Optional client user agent
+                - scopes: Optional permission scopes
+                - metadata: Optional additional session metadata
+
+        Returns:
+            AuthenticationResult: Result containing:
+                - session_id: Unique session identifier
+                - expires_at: Session expiration time
+                - metadata: Session metadata including creation info
+
+        Example:
+            ```python
+            result = await provider.authenticate({
+                "user_id": 123,
+                "ip_address": "127.0.0.1",
+                "user_agent": "Mozilla/5.0...",
+                "scopes": ["read", "write"]
+            })
+            ```
+        """
         if not self.validate_credentials(credentials):
             return AuthenticationResult(
                 success=False,
@@ -83,7 +188,7 @@ class SessionAuthenticationProvider(AuthenticationProvider):
             "user_agent": credentials.get("user_agent"),
             "created_at": current_time.isoformat(),
             "last_activity": current_time.isoformat(),
-            "scopes": list(credentials.get("scopes", [])),
+            "scopes": set(credentials.get("scopes", [])),
             "ip_address": credentials.get("ip_address"),
             **(credentials.get("metadata", {})),
         }
@@ -112,7 +217,19 @@ class SessionAuthenticationProvider(AuthenticationProvider):
         )
 
     async def validate_authentication(self, auth_data: Dict[str, Any]) -> bool:
-        """Validate if session exists and is not expired"""
+        """
+        Validate if a session exists and is not expired.
+
+        Checks if the session ID exists, hasn't expired, and updates
+        the last activity timestamp if valid.
+
+        Args:
+            auth_data: Dictionary containing:
+                - session_id: The session identifier to validate
+
+        Returns:
+            bool: True if session is valid and updated, False otherwise
+        """
         session_id = auth_data.get("session_id")
         if not session_id:
             return False
@@ -129,16 +246,26 @@ class SessionAuthenticationProvider(AuthenticationProvider):
                 await self.store.delete_session(session_id)
             return False
 
-        metadata = session["metadata"].copy()
+        metadata = session.get("metadata", {}).copy()
         metadata["last_activity"] = current_time.isoformat()
+
         success = await self.store.update_session(
-            session_id=session_id, metadata=metadata, session_data=session
+            session_id=session_id, metadata=metadata
         )
 
         return success
 
     async def revoke_authentication(self, auth_data: Dict[str, Any]) -> bool:
-        """End the session"""
+        """
+        End a session by deleting it from storage.
+
+        Args:
+            auth_data: Dictionary containing:
+                - session_id: The session identifier to revoke
+
+        Returns:
+            bool: True if session was successfully deleted, False otherwise
+        """
         session_id = auth_data.get("session_id")
         if not session_id:
             return False
@@ -147,4 +274,10 @@ class SessionAuthenticationProvider(AuthenticationProvider):
 
     @property
     def supports_revocation(self) -> bool:
+        """
+        Whether this provider supports session revocation.
+
+        Returns:
+            bool: Always True as sessions can be explicitly ended
+        """
         return True

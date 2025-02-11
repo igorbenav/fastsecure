@@ -15,8 +15,6 @@ from .providers import (
     DatabaseSessionStore,
     DBSession,
 )
-from .middleware import AuthenticationMiddleware
-from .dependencies import requires_auth
 from .exceptions import (
     AuthenticationError,
     InvalidCredentialsError,
@@ -44,9 +42,6 @@ __all__ = [
     "RedisSessionStore",
     "DatabaseSessionStore",
     "DBSession",
-    # FastAPI Integration
-    "AuthenticationMiddleware",
-    "requires_auth",
     # Exceptions
     "AuthenticationError",
     "InvalidCredentialsError",

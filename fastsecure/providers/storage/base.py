@@ -1,38 +1,38 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, TypeVar, Generic
+
+T = TypeVar("T")
 
 
-class SessionStore(ABC):
-    """Base class for session storage"""
+class SessionStore(ABC, Generic[T]):
+    """Base class for session storage with flexible user identification"""
+
+    def __init__(self, identifier_field: str = "id"):
+        self.identifier_field = identifier_field
 
     @abstractmethod
     async def create_session(
         self,
-        user_id: int,
+        user_id: T,
         session_id: str,
         expires_at: datetime,
         metadata: Dict[str, Any],
     ) -> bool:
-        """Create a new session"""
         pass
 
     @abstractmethod
     async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
-        """Get session data"""
         pass
 
     @abstractmethod
     async def update_session(self, session_id: str, metadata: Dict[str, Any]) -> bool:
-        """Update session metadata and last activity"""
         pass
 
     @abstractmethod
     async def delete_session(self, session_id: str) -> bool:
-        """Delete a session"""
         pass
 
     @abstractmethod
-    async def get_user_sessions(self, user_id: int) -> List[Dict[str, Any]]:
-        """Get all sessions for a user"""
+    async def get_user_sessions(self, user_identifier: T) -> List[Dict[str, Any]]:
         pass

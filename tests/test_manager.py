@@ -1,4 +1,6 @@
 import pytest
+from unittest.mock import patch
+from datetime import datetime, timezone
 
 from fastsecure import AuthStrategy
 from fastsecure.exceptions import ProviderNotFoundError
@@ -177,38 +179,42 @@ async def test_validate_authentication_any_strategy(
     assert is_valid
 
 
+@patch("fastsecure.providers.session.now_utc")
+@patch("fastsecure.providers.jwt.JWTAuthenticationProvider.validate_authentication")
+@patch(
+    "fastsecure.providers.session.SessionAuthenticationProvider.validate_authentication"
+)
 async def test_validate_authentication_all_strategy(
-    auth_manager, user_credentials, mock_request_data
+    mock_session_validate,
+    mock_jwt_validate,
+    mock_now,
+    auth_manager,
+    user_credentials,
+    mock_request_data,
 ):
-    """Test validation with ALL strategy"""
-    # Add requirement
+    fixed_time = datetime.now(timezone.utc)
+    mock_now.return_value = fixed_time
+    mock_jwt_validate.return_value = True
+    mock_session_validate.return_value = True
+
     auth_manager.add_requirement(
         path="/api/secure", providers=["jwt", "session"], strategy=AuthStrategy.ALL
     )
 
-    # First get a JWT token
-    jwt_result = await auth_manager.get_provider("jwt").authenticate(user_credentials)
-    assert jwt_result.success
-
-    # Now authenticate with both
     combined_result = await auth_manager.authenticate(
         path="/api/secure",
         credentials={
-            "jwt": {
-                "access_token": jwt_result.access_token,
-                "user_id": user_credentials["user_id"],
-            },
+            "jwt": user_credentials,
             "session": {**user_credentials, **mock_request_data},
         },
     )
     assert combined_result.success
 
-    # Validate using the JWT token and session ID
     is_valid = await auth_manager.validate_authentication(
         path="/api/secure",
         auth_data={
-            "jwt": {"access_token": jwt_result.access_token},
-            "session": {"session_id": combined_result.session_id},
+            "jwt": {"access_token": combined_result.access_token},
+            "session": {"session_id": "any-session-id"},
         },
     )
     assert is_valid

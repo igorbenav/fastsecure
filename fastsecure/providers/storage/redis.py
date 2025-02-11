@@ -1,10 +1,9 @@
-import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
-
+import json
 import redis.asyncio as redis
 
-from ..storage.base import SessionStore
+from .base import SessionStore
 
 
 class RedisSessionStore(SessionStore):
@@ -21,20 +20,47 @@ class RedisSessionStore(SessionStore):
         self.user_prefix = user_prefix
 
     def _session_key(self, session_id: str) -> str:
-        """Get Redis key for session"""
         return f"{self.prefix}{session_id}"
 
     def _user_key(self, user_id: int) -> str:
-        """Get Redis key for user's sessions"""
         return f"{self.user_prefix}{user_id}"
 
     def _serialize_datetime(self, dt: datetime) -> str:
-        """Serialize datetime to string"""
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
         return dt.isoformat()
 
     def _deserialize_datetime(self, dt_str: str) -> datetime:
-        """Deserialize datetime from string"""
-        return datetime.fromisoformat(dt_str)
+        dt = datetime.fromisoformat(dt_str)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+
+    def _serialize_session(self, session_data: Dict[str, Any]) -> str:
+        serialized = {
+            "user_id": session_data["user_id"],
+            "session_id": session_data["session_id"],
+            "expires_at": self._serialize_datetime(session_data["expires_at"]),
+            "created_at": self._serialize_datetime(
+                session_data.get("created_at", datetime.now(timezone.utc))
+            ),
+            "last_activity": self._serialize_datetime(
+                session_data.get("last_activity", datetime.now(timezone.utc))
+            ),
+            "metadata": session_data.get("metadata", {}),
+        }
+        return json.dumps(serialized)
+
+    def _deserialize_session(self, session_str: str) -> Dict[str, Any]:
+        data = json.loads(session_str)
+        return {
+            "user_id": data["user_id"],
+            "session_id": data["session_id"],
+            "expires_at": self._deserialize_datetime(data["expires_at"]),
+            "created_at": self._deserialize_datetime(data["created_at"]),
+            "last_activity": self._deserialize_datetime(data["last_activity"]),
+            "metadata": data.get("metadata", {}),
+        }
 
     async def create_session(
         self,
@@ -43,23 +69,25 @@ class RedisSessionStore(SessionStore):
         expires_at: datetime,
         metadata: Dict[str, Any],
     ) -> bool:
-        """Create a new session in Redis"""
+        now = datetime.now(timezone.utc)
         session_data = {
             "user_id": user_id,
             "session_id": session_id,
-            "expires_at": self._serialize_datetime(expires_at),
-            "created_at": self._serialize_datetime(datetime.now()),
-            "last_activity": self._serialize_datetime(datetime.now()),
+            "expires_at": expires_at,
+            "created_at": now,
+            "last_activity": now,
             "metadata": metadata,
         }
 
         try:
             session_key = self._session_key(session_id)
-            await self.redis.set(
-                session_key,
-                json.dumps(session_data),
-                px=int((expires_at - datetime.now()).total_seconds() * 1000),
-            )
+            serialized = self._serialize_session(session_data)
+
+            expires_in_ms = int((expires_at - now).total_seconds() * 1000)
+            if expires_in_ms <= 0:
+                return False
+
+            await self.redis.set(session_key, serialized, px=expires_in_ms)
 
             user_key = self._user_key(user_id)
             await self.redis.sadd(user_key, session_id)
@@ -69,50 +97,46 @@ class RedisSessionStore(SessionStore):
             return False
 
     async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
-        """Get session data from Redis"""
-        session_key = self._session_key(session_id)
-        data = await self.redis.get(session_key)
+        try:
+            session_key = self._session_key(session_id)
+            data = await self.redis.get(session_key)
 
-        if not data:
+            if not data:
+                return None
+
+            if isinstance(data, bytes):
+                data = data.decode("utf-8")
+
+            return self._deserialize_session(data)
+        except Exception:
             return None
 
-        session_data = json.loads(data)
-        session_data["expires_at"] = self._deserialize_datetime(
-            session_data["expires_at"]
-        )
-        session_data["created_at"] = self._deserialize_datetime(
-            session_data["created_at"]
-        )
-        session_data["last_activity"] = self._deserialize_datetime(
-            session_data["last_activity"]
-        )
-
-        return session_data
-
     async def update_session(self, session_id: str, metadata: Dict[str, Any]) -> bool:
-        """Update session metadata and last activity"""
         try:
             session_data = await self.get_session(session_id)
             if not session_data:
                 return False
 
-            session_data["metadata"].update(metadata)
-            session_data["last_activity"] = self._serialize_datetime(datetime.now())
+            session_data["metadata"] = metadata
+            session_data["last_activity"] = datetime.now(timezone.utc)
 
             expires_at = session_data["expires_at"]
-            ttl = int((expires_at - datetime.now()).total_seconds() * 1000)
-            if ttl <= 0:
+            now = datetime.now(timezone.utc)
+            expires_in_ms = int((expires_at - now).total_seconds() * 1000)
+
+            if expires_in_ms <= 0:
                 return False
 
             session_key = self._session_key(session_id)
-            await self.redis.set(session_key, json.dumps(session_data), px=ttl)
+            await self.redis.set(
+                session_key, self._serialize_session(session_data), px=expires_in_ms
+            )
 
             return True
         except Exception:
             return False
 
     async def delete_session(self, session_id: str) -> bool:
-        """Delete session from Redis"""
         try:
             session_data = await self.get_session(session_id)
             if not session_data:
@@ -129,16 +153,21 @@ class RedisSessionStore(SessionStore):
             return False
 
     async def get_user_sessions(self, user_id: int) -> List[Dict[str, Any]]:
-        """Get all sessions for a user"""
-        user_key = self._user_key(user_id)
-        session_ids = await self.redis.smembers(user_key)
+        try:
+            user_key = self._user_key(user_id)
+            session_ids = await self.redis.smembers(user_key)
 
-        sessions = []
-        for session_id in session_ids:
-            session_data = await self.get_session(session_id.decode())
-            if session_data:
-                sessions.append(session_data)
-            else:
-                await self.redis.srem(user_key, session_id)
+            sessions = []
+            for session_id in session_ids:
+                session_id = (
+                    session_id.decode() if isinstance(session_id, bytes) else session_id
+                )
+                session_data = await self.get_session(session_id)
+                if session_data:
+                    sessions.append(session_data)
+                else:
+                    await self.redis.srem(user_key, session_id)
 
-        return sessions
+            return sessions
+        except Exception:
+            return []

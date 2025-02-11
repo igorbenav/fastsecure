@@ -5,7 +5,7 @@ from typing import Dict, Any, List, Optional
 class MemorySessionStore:
     """In-memory session storage for development/testing"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.sessions: Dict[str, Dict[str, Any]] = {}
         self.user_sessions: Dict[int, List[str]] = {}
 
