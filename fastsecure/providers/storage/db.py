@@ -149,7 +149,8 @@ class DatabaseSessionStore:
                 )
                 result = await db.execute(stmt)
                 await db.commit()
-                return result.rowcount > 0
+                is_not_empty: bool = result.rowcount > 0
+                return is_not_empty
         except Exception:
             if "db" in locals():
                 await db.rollback()

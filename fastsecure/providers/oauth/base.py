@@ -166,7 +166,7 @@ class OAuthProvider(AuthenticationProvider):
                     details={"status_code": response.status_code},
                 )
 
-            token_data = await response.json()
+            token_data: dict = await response.json()
             return token_data
 
     async def get_user_info(self, access_token: str) -> Dict[str, Any]:
@@ -200,7 +200,7 @@ class OAuthProvider(AuthenticationProvider):
                     details={"status_code": response.status_code},
                 )
 
-            user_data = await response.json()
+            user_data: dict = await response.json()
             return user_data
 
     @abstractmethod

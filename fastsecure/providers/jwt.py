@@ -117,7 +117,9 @@ class JWTConfig(BaseModel):
             SubjectType.USERNAME: lambda c: c["username"],
             SubjectType.EMAIL: lambda c: c["email"],
         }
-        return subject_map[self.subject_type](credentials)
+
+        subject_credentials: str = subject_map[self.subject_type](credentials)
+        return subject_credentials
 
     def get_additional_claims(self, credentials: Dict[str, Any]) -> Dict[str, Any]:
         """Extract configured additional claims from credentials"""

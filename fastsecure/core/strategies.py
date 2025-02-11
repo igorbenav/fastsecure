@@ -166,7 +166,7 @@ class AnyAuthStrategy(AuthenticationStrategy):
                         errors.append(f"{str(e)}")
                         continue
 
-                result = await provider.authenticate(auth_data)
+                result: AuthenticationResult = await provider.authenticate(auth_data)
                 if result.success and (
                     not requirement.scopes
                     or result.metadata.get("scopes", set()).issuperset(
