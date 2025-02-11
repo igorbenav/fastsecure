@@ -1,6 +1,6 @@
 [project]
 name = "fastsecure"
-version = "0.2.0"
+version = "0.3.0"
 description = "Flexible authentication system for FastAPI applications"
 readme = "README.md"
 requires-python = ">=3.9"
