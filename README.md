@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://igorbenav.github.io/fastsecure/">
-    <img src="docs/assets/FastSecure.png" alt="FastSecure logo" width="45%" height="auto">
+    <img src="docs/assets/FastSecure.png" alt="FastSecure logo" width="65%" height="auto">
   </a>
 </p>
 
