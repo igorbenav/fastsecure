@@ -1,5 +1,12 @@
 # FastSecure
 
+> [!CAUTION]
+> **FastSecure is deprecated and no longer maintained.** Its successor is
+> **[crudauth](https://github.com/benavlabs/crudauth)**, a batteries-included,
+> transport-agnostic authentication library for FastAPI (sessions, JWT, OAuth, and email
+> flows) that is actively maintained and security-hardened. Please migrate to it.
+> Docs: https://benavlabs.github.io/crudauth
+
 <p align="center">
   <a href="https://igorbenav.github.io/fastsecure/">
     <img src="docs/assets/FastSecure.png" alt="FastSecure logo" width="65%" height="auto">
@@ -26,8 +33,8 @@ A modern, flexible authentication system for FastAPI applications with support f
 - [Contributing](#contributing)
 - [License](#license)
 
-> [!WARNING]  
-> FastSecure is still experimental.
+> [!CAUTION]
+> FastSecure is deprecated. Use [crudauth](https://github.com/benavlabs/crudauth) instead.
 
 ## Features
 
